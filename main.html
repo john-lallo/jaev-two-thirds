@@ -1,0 +1,183 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+	<title>jaev-2/3</title>
+	<style>
+		html, body{
+			background-color: #111;
+			margin: 0;
+			border: 0;
+		}
+
+		#world {
+			margin: 24px;
+			position: relative;
+
+			border: 1px dashed #aaa;
+
+			width: 720px;
+			height: 720px;
+
+			overflow: hidden;
+		}
+
+		.P {
+			width: 4px; height: 4px;
+
+			border: 1px solid #aaa;
+			border-radius: 100%;
+
+  			box-shadow: 0 0 0 4px #222;
+		}
+
+		.solid { background-color: #aaa; }
+	</style>
+
+	<script src = "https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+	<script src = "numeric.js"></script>
+	<script language = "javascript">
+
+		/* global */
+		var dt = 0.1;
+
+		var g = [0, -9.81];
+
+		/* point mass */
+		var point = function(i, mass, x, y){
+			this.i = i;
+			this.m = mass;
+			this.minv = 1/mass;
+
+			this.q = [x, y];
+
+			this.elem = null;
+		}
+
+		point.prototype.render = function(radius){
+			var elem_str =
+			'<div id = "' + this.i + '" class = "P" ' +
+			'style = "position: absolute; bottom: -3px; left: -3px"></div>';
+		
+			$("#world").append(elem_str);
+			this.elem = $("#" + this.i);
+			this.sync();
+		}
+
+		point.prototype.sync = function(){
+			$("#" + this.i).css({
+				"-webkit-transform" : "translate("
+				+ this.q[0] + "px, "
+				+ (-this.q[1]) + "px)"
+			});
+		}
+
+		/* rigid body */
+		var object = function(i, components, vx, vy, ww){
+			this.components = components;
+
+			//centre of mass
+			this.q = [0, 0]; var M = 0;
+			this.components.forEach(function(p){
+				M += p.m;
+				this.q = numeric['+'](this.q, numeric['*'](p.m, p.q));
+			}, this);
+			this.q = numeric['/'](this.q, M);
+			this.qprev = numeric['-'](this.q, [vx*dt, vy*dt]);
+
+			//body space positions
+			this.R = [];
+			this.components.forEach(function(p){ this.R[p.i] = numeric['-'](p.q, this.q); }, this);
+
+			this.th = 0;
+			this.thprev = this.th - ww*dt;
+		}
+		object.prototype.render = function(){
+			this.components.forEach(function(p){ p.render(); });
+			this.sync();
+		}
+		object.prototype.sync = function(){
+			this.components.forEach(function(p){ p.sync(); });
+		}
+		object.prototype.align = function(){
+			this.components.forEach(function(p){
+				var r = [
+						Math.cos(this.th)*this.R[p.i][0] - Math.sin(this.th)*this.R[p.i][1],
+						Math.sin(this.th)*this.R[p.i][0] + Math.cos(this.th)*this.R[p.i][1]
+						];
+				p.q = numeric['+'](this.q, r);
+			}, this);
+		}
+
+
+		/* integrate laws of motion */
+		function integrate(){
+			O.forEach(function(o){
+
+				var a = g;
+				var qnext =
+				numeric['+'](numeric['-'](numeric['*'](2, o.q), o.qprev), numeric['*'](a, dt*dt));
+
+				o.qprev = o.q; o.q = qnext;
+
+				var alpha = 0;
+				var thnext = o.th*2 - o.thprev + alpha*dt*dt; 
+
+				o.thprev = o.th; o.th = thnext;
+
+				o.align();
+			})
+		}
+
+		/* render world space */
+		function flip(){
+			O.forEach(function(o){ o.sync(); });
+		}
+
+		/* one simulation step. */
+		function timestep(){
+			integrate();
+
+			flip();
+		}
+
+
+
+		var P = [];
+		var O = [];
+
+		var plabel = 0;
+		var olabel = 0;
+		/* construct world */
+		function init(){
+
+			//var V = [];
+
+			P[plabel] = new point(plabel, 1, 220, 220); ++plabel;
+			P[plabel] = new point(plabel, 1, 240, 220); ++plabel;
+			P[plabel] = new point(plabel, 1, 240, 240); ++plabel;
+			P[plabel] = new point(plabel, 1, 220, 240); ++plabel;
+
+			O[olabel] = new object(olabel, P, 30, 30, 0.4); O[olabel].render(); ++olabel;
+		}
+
+
+
+		$(document).ready(function(){
+
+			init();
+
+			window.setInterval(timestep, 160 * dt);
+		});
+
+
+	</script>
+</head>
+
+<body>
+	<div id = "world">
+	</div>
+
+
+</body>
+
+</html>
