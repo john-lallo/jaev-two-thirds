@@ -51,9 +51,9 @@
 	<script language = "javascript">
 
 		/* global */
-		var dt = 0.2;
+		var dt = 0.02;
 
-		var g = [0, 0];//-9.81];
+		var g = [0, -9.81];
 
 		/* rigid body */
 		var object = function(i, M, I, q, v, th, ww){
@@ -133,6 +133,8 @@
 
 		constraint.prototype.jacobian = function(){ return [[0, 0, 0, 0, 0, 0]]; }
 
+		constraint.prototype.C = function(){ return 0; }
+		constraint.prototype.error = function(){ return 0; }
 		constraint.prototype.solve = function(){
 
 			var dq = numeric['dot'](
@@ -158,9 +160,8 @@
 		angle_constraint.prototype = Object.create(constraint.prototype);
 		angle_constraint.prototype.constructor = angle_constraint;
 		
-		angle_constraint.prototype.C = function(){
-			return [[(this.A.th - this.B.th)]];
-		}
+		angle_constraint.prototype.C = function(){ return [[(this.A.th - this.B.th)]]; }
+		angle_constraint.prototype.error = function(){ return this.A.th - this.B.th; }
 		angle_constraint.prototype.jacobian = function(){
 			return [[0, 0, 1, 0, 0, -1]];
 		}
@@ -197,8 +198,15 @@
 			numeric['+'](this.B.q, this.RB)
 			);
 
-			console.log(e);
 			return [[e[0]], [e[1]]];
+		}
+		rev_constraint.prototype.error = function(){
+			var e = numeric['-'](
+			numeric['+'](this.A.q, this.RA),
+			numeric['+'](this.B.q, this.RB)
+			);
+
+			return Math.sqrt(e[0]*e[0] + e[1]*e[1]);
 		}
 		rev_constraint.prototype.jacobian = function(){
 			var J = [
@@ -239,14 +247,21 @@
 			});
 		}
 
+
+		var iter = 360;
 		//solve constraints
 		function constrain(){
-			C.forEach(function(c){ c.prepare(); });
+			var eMax = 9; var i = 0;
+			for(i = 0; (eMax > 0.1 && i < iter); ++i){
+				eMax = 0;
+				C.forEach(function(c){
+					c.prepare();
+					c.solve();
+				});
 
-			C.forEach(function(c){
-				c.solve();
-			});
-
+				C.forEach(function(c){ eMax = Math.max(eMax, c.error()); });
+			}
+			console.log(eMax.toFixed(2) + '@' + i + 'iters');
 		}
 
 
@@ -259,15 +274,21 @@
 
 		function init(){
 
-			B[blabel] = new quad(blabel, 1, 120, 10, [260, 200], [0, 0], 0, 0);
+			B[blabel] = new quad(blabel, 1, 20, 20, [260, 200], [0, 0], 0, 0);
 			B[blabel].render(); ++blabel;
 
-
-			B[blabel] = new quad(blabel, 1, 20, 20, [310, 260], [0, -10], 0, 0);
+			B[blabel] = new quad(blabel, 1, 20, 20, [260, 260], [0, 0], 0, 0);
 			B[blabel].render(); ++blabel;
 
-			C[clabel] = new rev_constraint(B[0], B[1], [310, 200]); ++clabel;
+			B[blabel] = new quad(blabel, 1, 20, 20, [200, 260], [0, 0], 0, 0);
+			B[blabel].render(); ++blabel;
 
+			B[blabel] = new quad(blabel, 1, 20, 20, [200, 200], [0, 100], 0, 0);
+			B[blabel].render(); ++blabel;
+
+			C[clabel] = new rev_constraint(B[0], B[1], [260, 200]); ++clabel;
+			C[clabel] = new rev_constraint(B[1], B[3], [200, 200]); ++clabel;
+			C[clabel] = new rev_constraint(B[0], B[2], [260, 200]); ++clabel;
 
 
 
