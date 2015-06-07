@@ -40,15 +40,16 @@
 		/* global */
 		var dt = 0.1;
 
-		var g = [0, -9.81];
+		var g = [0, 0];//-9.81];
 
 		/* point mass */
-		var point = function(i, mass, x, y){
+		var point = function(i, mass, q, v){
 			this.i = i;
 			this.m = mass;
-			this.minv = 1/mass;
+			this.invm = 1/mass;
 
-			this.q = [x, y];
+			this.q = q;
+			this.qprev = [q[0] - v[0]*dt, q[1] - v[1]*dt];
 
 			this.elem = null;
 		}
@@ -71,95 +72,113 @@
 			});
 		}
 
-		/* rigid body */
-		var object = function(i, components, vx, vy, ww){
-			this.components = components;
-
-			//centre of mass
-			this.q = [0, 0]; var M = 0;
-			this.components.forEach(function(p){
-				M += p.m;
-				this.q = numeric['+'](this.q, numeric['*'](p.m, p.q));
-			}, this);
-			this.q = numeric['/'](this.q, M);
-			this.qprev = numeric['-'](this.q, [vx*dt, vy*dt]);
-
-			//body space positions
-			this.R = [];
-			this.components.forEach(function(p){ this.R[p.i] = numeric['-'](p.q, this.q); }, this);
-
-			this.th = 0;
-			this.thprev = this.th - ww*dt;
+		/* constraint */
+		var constraint = function(A, B){
+			this.A = A; this.B = B;
 		}
-		object.prototype.render = function(){
-			this.components.forEach(function(p){ p.render(); });
-			this.sync();
-		}
-		object.prototype.sync = function(){
-			this.components.forEach(function(p){ p.sync(); });
-		}
-		object.prototype.align = function(){
-			this.components.forEach(function(p){
-				var r = [
-						Math.cos(this.th)*this.R[p.i][0] - Math.sin(this.th)*this.R[p.i][1],
-						Math.sin(this.th)*this.R[p.i][0] + Math.cos(this.th)*this.R[p.i][1]
-						];
-				p.q = numeric['+'](this.q, r);
-			}, this);
+		constraint.prototype.C = function() { return 0;	}
+		constraint.prototype.nablaC = function() { return [[0, 0, 0, 0]]; }
+		constraint.prototype.solve = function(){
+			var nablaC = this.nablaC();
+			var nablaCT = numeric['transpose'](nablaC);
+
+			var W = [
+				[this.A.invm, 0, 0, 0],
+				[0, this.A.invm, 0, 0],
+				[0, 0, this.B.invm, 0],
+				[0, 0, 0, this.B.invm]
+			];
+
+			var WnablaCT = numeric['dot'](W, nablaCT);
+
+			var nablaCWnablaCT =
+			numeric['dot'](nablaC, WnablaCT);
+
+			var lambda =
+			numeric['*'](
+				numeric['inv'](nablaCWnablaCT), numeric['*'](-1, this.C())
+			);
+
+			var dP = numeric['dot'](WnablaCT, lambda);
+
+			//update positions
+			this.A.q = numeric['+'](this.A.q, [dP[0][0], dP[1][0]]);
+			this.B.q = numeric['+'](this.B.q, [dP[2][0], dP[3][0]]);
 		}
 
+		/* constraint: dist constraint */
+		function dist_constraint(A, B){
+			constraint.call(this, A, B);
+			var D = numeric['-'](this.A.q, this.B.q);
+			this.D = Math.sqrt(D[0]*D[0] + D[1]*D[1]);
+		}
+		dist_constraint.prototype = Object.create(constraint.prototype);
+		dist_constraint.prototype.constructor = dist_constraint;
+
+		dist_constraint.prototype.C = function(){
+			var d = numeric['-'](this.A.q, this.B.q);
+			return ((d[0]*d[0] + d[1]*d[1]) - this.D*this.D)/2;
+		}
+		dist_constraint.prototype.nablaC = function(){
+			var nablaC = [[
+				this.A.q[0] - this.B.q[0],
+				this.A.q[1] - this.B.q[1],
+				this.B.q[0] - this.A.q[0],
+				this.B.q[1] - this.A.q[1],
+			]];
+			return nablaC;
+		}
+
+
+		/* solve constraints */
+		function constrain(){
+			C.forEach(function(c){ c.solve(); });
+		}
 
 		/* integrate laws of motion */
 		function integrate(){
-			O.forEach(function(o){
-
+			P.forEach(function(p){
 				var a = g;
 				var qnext =
-				numeric['+'](numeric['-'](numeric['*'](2, o.q), o.qprev), numeric['*'](a, dt*dt));
+				numeric['+'](numeric['-'](numeric['*'](2, p.q), p.qprev), numeric['*'](a, dt*dt));
 
-				o.qprev = o.q; o.q = qnext;
-
-				var alpha = 0;
-				var thnext = o.th*2 - o.thprev + alpha*dt*dt; 
-
-				o.thprev = o.th; o.th = thnext;
-
-				o.align();
+				p.qprev = p.q; p.q = qnext;
 			})
 		}
 
-		/* render world space */
-		function flip(){
-			O.forEach(function(o){ o.sync(); });
-		}
 
 		/* one simulation step. */
+		var t = 0;
 		function timestep(){
-			integrate();
+			++t;
+			//if(t == 120){ P[0].q[0] += 100; P[1].q[0] -= 100; }
 
-			flip();
+			integrate();
+			constrain();
+			P.forEach(function(p){p.sync();});
 		}
 
 
 
 		var P = [];
-		var O = [];
+		var C = [];
 
 		var plabel = 0;
-		var olabel = 0;
+		var clabel = 0;
 		/* construct world */
 		function init(){
 
 			//var V = [];
 
-			P[plabel] = new point(plabel, 1, 220, 220); ++plabel;
-			P[plabel] = new point(plabel, 1, 240, 220); ++plabel;
-			P[plabel] = new point(plabel, 1, 240, 240); ++plabel;
-			P[plabel] = new point(plabel, 1, 220, 240); ++plabel;
+			P[plabel] = new point(plabel, 1, [220, 220], [-4, 0]); P[plabel].render(); ++plabel;
+			P[plabel] = new point(plabel, 1, [320, 220], [0, -4]); P[plabel].render(); ++plabel;
+			P[plabel] = new point(plabel, 1, [320, 320], [4, 0]); P[plabel].render(); ++plabel;
+			P[plabel] = new point(plabel, 1, [220, 320], [0, 4]); P[plabel].render(); ++plabel;
 
-			O[olabel] = new object(olabel, P, 30, 30, 0.4); O[olabel].render(); ++olabel;
+			C[clabel] = new dist_constraint(P[0], P[1]); ++clabel;
+			C[clabel] = new dist_constraint(P[1], P[2]); ++clabel;
+
 		}
-
 
 
 		$(document).ready(function(){
