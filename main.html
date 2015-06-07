@@ -21,13 +21,26 @@
 			overflow: hidden;
 		}
 
+		/*
 		.P {
+			position: absolute;
+
 			width: 4px; height: 4px;
 
 			border: 1px solid #aaa;
 			border-radius: 100%;
 
   			box-shadow: 0 0 0 4px #222;
+		}
+		*/
+
+		.obj-quad {
+			position: absolute;
+
+			width: 20px; height: 20px;
+			border: 1px solid #aaa;
+
+			/*box-shadow: 0 0 0 3px #222;*/
 		}
 
 		.solid { background-color: #aaa; }
@@ -38,136 +51,238 @@
 	<script language = "javascript">
 
 		/* global */
-		var dt = 0.1;
+		var dt = 0.2;
 
-		var g = [0, -9.81];
+		var g = [0, 0];//-9.81];
 
-		/* point mass */
-		var point = function(i, mass, x, y){
+		/* rigid body */
+		var object = function(i, M, I, q, v, th, ww){
+
 			this.i = i;
-			this.m = mass;
-			this.minv = 1/mass;
 
-			this.q = [x, y];
+			this.M = M;
+			this.invM = 1/M;
+
+			this.I = I;
+			this.invI = 1/I;
+			
+
+			this.q = q;
+			this.qprev = numeric['-'](q, numeric['*'](v, dt));
+
+			this.th = th;
+			this.thprev = th - ww*dt;
 
 			this.elem = null;
 		}
-
-		point.prototype.render = function(radius){
-			var elem_str =
-			'<div id = "' + this.i + '" class = "P" ' +
-			'style = "position: absolute; bottom: -3px; left: -3px"></div>';
-		
-			$("#world").append(elem_str);
-			this.elem = $("#" + this.i);
-			this.sync();
-		}
-
-		point.prototype.sync = function(){
+		object.prototype.sync = function(){
 			$("#" + this.i).css({
 				"-webkit-transform" : "translate("
 				+ this.q[0] + "px, "
-				+ (-this.q[1]) + "px)"
+				+ (-this.q[1]) + "px) "
+				+ "rotate(" + (-this.th) + "rad)"
 			});
 		}
 
-		/* rigid body */
-		var object = function(i, components, vx, vy, ww){
-			this.components = components;
+		/* rigid body: rectangle */
+		function quad(i, rho, w, h, q, v, th, ww){
+			var M = rho * w * h;
+			var I = rho * (h*h + w*w) / 12;
 
-			//centre of mass
-			this.q = [0, 0]; var M = 0;
-			this.components.forEach(function(p){
-				M += p.m;
-				this.q = numeric['+'](this.q, numeric['*'](p.m, p.q));
-			}, this);
-			this.q = numeric['/'](this.q, M);
-			this.qprev = numeric['-'](this.q, [vx*dt, vy*dt]);
-
-			//body space positions
-			this.R = [];
-			this.components.forEach(function(p){ this.R[p.i] = numeric['-'](p.q, this.q); }, this);
-
-			this.th = 0;
-			this.thprev = this.th - ww*dt;
+			object.call(this, i, M, I, q, v, th, ww);
+			this.w = w;
+			this.h = h;
 		}
-		object.prototype.render = function(){
-			this.components.forEach(function(p){ p.render(); });
+		quad.prototype = Object.create(object.prototype);
+		quad.prototype.constructor = quad;
+		quad.prototype.render = function(){
+			var elem_str =
+			'<div id = "' + this.i + '" ' +
+			'class = "obj-quad" style = "width: ' + this.w + 'px; height: ' + this.h + 'px; ' +
+			'bottom: ' + (-this.h/2) + 'px; left: ' + (-this.w/2) + 'px" ' +
+			'></div>';
+		
+			$("#world").append(elem_str);
 			this.sync();
 		}
-		object.prototype.sync = function(){
-			this.components.forEach(function(p){ p.sync(); });
+
+		
+		/* constraint */
+		function constraint(A, B){
+			this.A = A; this.B = B;
 		}
-		object.prototype.align = function(){
-			this.components.forEach(function(p){
-				var r = [
-						Math.cos(this.th)*this.R[p.i][0] - Math.sin(this.th)*this.R[p.i][1],
-						Math.sin(this.th)*this.R[p.i][0] + Math.cos(this.th)*this.R[p.i][1]
-						];
-				p.q = numeric['+'](this.q, r);
-			}, this);
+
+		constraint.prototype.prepare = function(){
+			this.prepare_specifics();
+
+			this.J = this.jacobian();
+			this.JT = numeric['transpose'](this.J);
+
+			this.W = [
+					[ this.A.invM, 0, 0, 0, 0, 0 ],
+					[ 0, this.A.invM, 0, 0, 0, 0 ],
+					[ 0, 0, this.A.invI, 0, 0, 0 ],
+					[ 0, 0, 0, this.B.invM, 0, 0 ],
+					[ 0, 0, 0, 0, this.B.invM, 0 ],
+					[ 0, 0, 0, 0, 0, this.B.invI ]
+					];
+
+			this.invJWJT = numeric['inv'](numeric['dot'](this.J, numeric['dot'](this.W, this.JT)));
+		}
+		constraint.prototype.prepare_specifics = function(){return;}
+
+		constraint.prototype.jacobian = function(){ return [[0, 0, 0, 0, 0, 0]]; }
+
+		constraint.prototype.solve = function(){
+
+			var dq = numeric['dot'](
+						numeric['dot'](this.W,
+							numeric['dot'](this.JT, this.invJWJT)
+						),
+						numeric['*'](-1, this.C())
+					);
+			//console.log(dq);
+
+			//update q
+			this.A.q = numeric['+'](this.A.q, [dq[0][0], dq[1][0]]);
+			this.A.th += dq[2][0];
+			this.B.q = numeric['+'](this.B.q, [dq[3][0], dq[4][0]]);
+			this.B.th += dq[5][0];
 		}
 
 
-		/* integrate laws of motion */
+		/* constraint: angle constraint */
+		function angle_constraint(A, B){
+			constraint.call(this, A, B);
+		}
+		angle_constraint.prototype = Object.create(constraint.prototype);
+		angle_constraint.prototype.constructor = angle_constraint;
+		
+		angle_constraint.prototype.C = function(){
+			return [[(this.A.th - this.B.th)]];
+		}
+		angle_constraint.prototype.jacobian = function(){
+			return [[0, 0, 1, 0, 0, -1]];
+		}
+
+
+		/* constraint: revolute constraint */
+		function rev_constraint(A, B, P){
+			constraint.call(this, A, B);
+
+			this.rA = numeric['-'](P, A.q);
+			this.rA = [ Math.cos(this.A.th)*this.rA[0] + Math.sin(this.A.th)*this.rA[1],
+						- Math.sin(this.A.th)*this.rA[0] + Math.cos(this.A.th)*this.rA[1] ];
+
+			this.rB = numeric['-'](P, B.q);
+			this.rB = [ Math.cos(this.B.th)*this.rB[0] + Math.sin(this.B.th)*this.rB[1],
+						- Math.sin(this.B.th)*this.rB[0] + Math.cos(this.B.th)*this.rB[1] ];
+
+			this.RA = this.rA; this.RB = this.rB;
+		}
+
+		rev_constraint.prototype = Object.create(constraint.prototype);
+		rev_constraint.prototype.constructor = rev_constraint;
+
+		rev_constraint.prototype.prepare_specifics = function(){
+			this.RA = [ Math.cos(this.A.th)*this.rA[0] - Math.sin(this.A.th)*this.rA[1],
+						Math.sin(this.A.th)*this.rA[0] + Math.cos(this.A.th)*this.rA[1]];
+
+			this.RB = [ Math.cos(this.B.th)*this.rB[0] - Math.sin(this.B.th)*this.rB[1],
+						Math.sin(this.B.th)*this.rB[0] + Math.cos(this.B.th)*this.rB[1]];
+		}
+		rev_constraint.prototype.C = function(){
+			var e = numeric['-'](
+			numeric['+'](this.A.q, this.RA),
+			numeric['+'](this.B.q, this.RB)
+			);
+
+			console.log(e);
+			return [[e[0]], [e[1]]];
+		}
+		rev_constraint.prototype.jacobian = function(){
+			var J = [
+					[1, 0, -this.RA[1], -1, 0, this.RB[1]],
+					[0, 1, this.RA[0], 0, -1, -this.RB[0]],
+					];
+			return J;
+		}
+
+
+
+
+
+		var B = [];			// list of bodies
+		var blabel = 0;
+
+		var C = [];
+		var clabel = 0;		// list of constraints
+
+
+		//integrate positions
 		function integrate(){
-			O.forEach(function(o){
+			B.forEach(function(b){
 
+				//translation
 				var a = g;
-				var qnext =
-				numeric['+'](numeric['-'](numeric['*'](2, o.q), o.qprev), numeric['*'](a, dt*dt));
+				var qnext = numeric['+'](
+							numeric['-'](numeric['*'](2, b.q), b.qprev),
+							numeric['*'](a, dt*dt)
+							)
+				b.qprev = b.q; b.q = qnext;
 
-				o.qprev = o.q; o.q = qnext;
-
+				//rotation
 				var alpha = 0;
-				var thnext = o.th*2 - o.thprev + alpha*dt*dt; 
+				var thnext = b.th*2 - b.thprev + alpha*dt*dt;
+				b.thprev = b.th; b.th = thnext;
 
-				o.thprev = o.th; o.th = thnext;
-
-				o.align();
-			})
+			});
 		}
 
-		/* render world space */
-		function flip(){
-			O.forEach(function(o){ o.sync(); });
+		//solve constraints
+		function constrain(){
+			C.forEach(function(c){ c.prepare(); });
+
+			C.forEach(function(c){
+				c.solve();
+			});
+
 		}
 
-		/* one simulation step. */
+
 		function timestep(){
 			integrate();
+			constrain();
 
-			flip();
+			B.forEach(function(b){ b.sync() })
 		}
 
-
-
-		var P = [];
-		var O = [];
-
-		var plabel = 0;
-		var olabel = 0;
-		/* construct world */
 		function init(){
 
-			//var V = [];
+			B[blabel] = new quad(blabel, 1, 120, 10, [260, 200], [0, 0], 0, 0);
+			B[blabel].render(); ++blabel;
 
-			P[plabel] = new point(plabel, 1, 220, 220); ++plabel;
-			P[plabel] = new point(plabel, 1, 240, 220); ++plabel;
-			P[plabel] = new point(plabel, 1, 240, 240); ++plabel;
-			P[plabel] = new point(plabel, 1, 220, 240); ++plabel;
 
-			O[olabel] = new object(olabel, P, 30, 30, 0.4); O[olabel].render(); ++olabel;
+			B[blabel] = new quad(blabel, 1, 20, 20, [310, 260], [0, -10], 0, 0);
+			B[blabel].render(); ++blabel;
+
+			C[clabel] = new rev_constraint(B[0], B[1], [310, 200]); ++clabel;
+
+
+
+
+
 		}
 
-
-
 		$(document).ready(function(){
-
 			init();
 
 			window.setInterval(timestep, 160 * dt);
 		});
+
+		
+
+
 
 
 	</script>
