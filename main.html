@@ -201,7 +201,7 @@
 			numeric['+'](this.B.q, this.RB)
 			);
 
-			return [[ (e[0]*e[0] + e[1]*e[1]) ]];
+			return [[ (e[0]*e[0] + e[1]*e[1])/2 ]];
 		}
 		rev_constraint.prototype.jacobian = function(){
 
@@ -210,17 +210,34 @@
 			numeric['+'](this.B.q, this.RB)
 			)
 
+			var J = [[]];
+			var C0 = this.C();
+			var C = 0;
+			var e = 0.0001
+
+			this.A.q[0] += e; J[0][0] = (this.C() - C0)/e; this.A.q[0] -= e;
+			this.A.q[1] += e; J[0][1] = (this.C() - C0)/e; this.A.q[1] -= e;
+			this.A.th += e; this.prepare(); J[0][2] = (this.C() - C0)/e; this.A.th -= e; this.prepare();
+			this.B.q[0] += e; J[0][3] = (this.C() - C0)/e; this.B.q[0] -= e;
+			this.B.q[1] += e; J[0][4] = (this.C() - C0)/e; this.B.q[1] -= e;
+			this.B.th += e; this.prepare(); J[0][5] = (this.C() - C0)/e; this.B.th -= e; this.prepare();
+			/*
 			var J = [[
 				D[0],
-				D[0],
-				D[0]*(-this.RA[0]*Math.sin(this.A.th)-this.RA[1]*Math.cos(this.A.th))
-				+D[1]*(this.RA[1]*Math.cos(this.A.th)-this.RA[0]*Math.sin(this.A.th)),
 				D[1],
-				D[1],
-				D[0]*(-this.RB[0]*Math.sin(this.B.th)-this.RB[1]*Math.cos(this.B.th))
-				+D[1]*(this.RB[1]*Math.cos(this.B.th)-this.RB[0]*Math.sin(this.B.th))
+				(
+				 D[0]*(-this.RA[0]*Math.sin(this.A.th)-this.RA[1]*Math.cos(this.A.th))
+				+D[1]*(this.RA[1]*Math.cos(this.A.th)-this.RA[0]*Math.sin(this.A.th))
+				),
+				-D[0],
+				-D[1],
+				
+				(
+				-D[0]*(-this.RB[0]*Math.sin(this.B.th)+this.RB[1]*Math.cos(this.B.th))
+				-D[1]*(this.RB[1]*Math.cos(this.B.th)+this.RB[0]*Math.sin(this.B.th))
+				)
 				]];
-
+			*/
 			//console.log(J);
 
 			return J;
@@ -275,10 +292,10 @@
 
 		function init(){
 
-			B[blabel] = new quad(blabel, 1, 20, 20, [260, 200], [0, 10], 0, 0);
+			B[blabel] = new quad(blabel, 1, 20, 20, [260, 200], [0, 0], 0, 0);
 			B[blabel].render(); ++blabel;
 
-			B[blabel] = new quad(blabel, 1, 20, 20, [260, 260], [0, 0], 0, 0);
+			B[blabel] = new quad(blabel, 1, 20, 20, [260, 260], [10, 0], 0, 0);
 			B[blabel].render(); ++blabel;
 
 			B[blabel] = new quad(blabel, 1, 20, 20, [200, 260], [0, 0], 0, 0);
@@ -287,7 +304,7 @@
 			B[blabel] = new quad(blabel, 1, 20, 20, [200, 200], [0, 0], 0, 0);
 			B[blabel].render(); ++blabel;
 
-			C[clabel] = new rev_constraint(B[0], B[1], [260, 260]); ++clabel;
+			C[clabel] = new rev_constraint(B[0], B[1], [260, 200]); ++clabel;
 
 
 
@@ -297,7 +314,7 @@
 		$(document).ready(function(){
 			init();
 
-			//window.setInterval(timestep, 160 * dt);
+			window.setInterval(timestep, 160 * dt);
 		});
 
 		
