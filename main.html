@@ -22,15 +22,36 @@
 		}
 
 		.P {
-			width: 4px; height: 4px;
+			position: absolute;
+			width: 8px; height: 8px;
+
+			border: 3px solid #222;
+			border-radius: 100%;
+
+  			/*box-shadow: 0 0 0 4px #222;*/
+		}
+
+		.P-core{
+			position: absolute;
+			
+			top: 1px; bottom: 1px;
+			left: 1px; right: 1px;
 
 			border: 1px solid #aaa;
 			border-radius: 100%;
-
-  			box-shadow: 0 0 0 4px #222;
 		}
 
 		.solid { background-color: #aaa; }
+
+		.shaft {
+			position: absolute;
+			height: 1px;
+			background-color: #aaa;
+
+			-webkit-transform-origin: center left;
+
+			z-index: 1000;
+		}
 	</style>
 
 	<script src = "https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
@@ -54,18 +75,18 @@
 			this.elem = null;
 		}
 
-		point.prototype.render = function(radius){
+		point.prototype.render = function(){
 			var elem_str =
-			'<div id = "' + this.i + '" class = "P" ' +
-			'style = "position: absolute; bottom: -3px; left: -3px"></div>';
+			'<div id = "P' + this.i + '" class = "P solid" ' +
+			'style = "bottom: -7px; left: -7px"><div class = "P-core"></div></div>';
 		
 			$("#world").append(elem_str);
-			this.elem = $("#" + this.i);
+			this.elem = $("#P" + this.i);
 			this.sync();
 		}
 
 		point.prototype.sync = function(){
-			$("#" + this.i).css({
+			this.elem.css({
 				"-webkit-transform" : "translate("
 				+ this.q[0] + "px, "
 				+ (-this.q[1]) + "px)"
@@ -73,8 +94,11 @@
 		}
 
 		/* constraint */
-		var constraint = function(A, B){
+		var constraint = function(i, A, B){
+			this.i = i;
 			this.A = A; this.B = B;
+
+			this.elem = null;
 		}
 		constraint.prototype.C = function() { return 0;	}
 		constraint.prototype.nablaC = function() { return [[0, 0, 0, 0]]; }
@@ -107,8 +131,8 @@
 		}
 
 		/* constraint: dist constraint */
-		function dist_constraint(A, B){
-			constraint.call(this, A, B);
+		function dist_constraint(i, A, B){
+			constraint.call(this, i, A, B);
 			var D = numeric['-'](this.A.q, this.B.q);
 			this.D = Math.sqrt(D[0]*D[0] + D[1]*D[1]);
 		}
@@ -127,6 +151,33 @@
 				this.B.q[1] - this.A.q[1],
 			]];
 			return nablaC;
+		}
+
+
+		dist_constraint.prototype.render = function(){
+
+			var elem_str =
+			'<div id = "C' + this.i + '" class = "shaft" ' +
+			'style = "bottom: 0px; left: 0px"></div>';
+		
+			$("#world").append(elem_str);
+			this.elem = $("#C" + this.i);
+			this.sync();
+		}
+
+		dist_constraint.prototype.sync = function(){
+			var d = numeric['-'](this.A.q, this.B.q);
+			d = Math.sqrt(d[0]*d[0] + d[1]*d[1]);
+
+			var th = Math.acos((this.B.q[0] - this.A.q[0]) / d) *
+					(this.B.q[1] - this.A.q[1] > 0 ? 1 : -1);
+
+			this.elem.css({
+				"width" : (d) + "px",
+				"-webkit-transform" : "translate("
+				+ this.A.q[0] + "px, "
+				+ (-this.A.q[1]) + "px) rotate(" + (-th) + "rad)"
+			});
 		}
 
 
@@ -155,7 +206,8 @@
 
 			integrate();
 			constrain();
-			P.forEach(function(p){p.sync();});
+			P.forEach(function(p){ p.sync(); });
+			C.forEach(function(c){ c.sync(); });
 		}
 
 
@@ -170,14 +222,15 @@
 
 			//var V = [];
 
-			P[plabel] = new point(plabel, 1, [220, 220], [-4, 0]); P[plabel].render(); ++plabel;
-			P[plabel] = new point(plabel, 1, [320, 220], [0, -4]); P[plabel].render(); ++plabel;
-			P[plabel] = new point(plabel, 1, [320, 320], [4, 0]); P[plabel].render(); ++plabel;
-			P[plabel] = new point(plabel, 1, [220, 320], [0, 4]); P[plabel].render(); ++plabel;
+			P[plabel] = new point(plabel, 1, [220, 220], [0, -10]); P[plabel].render(); ++plabel;
+			P[plabel] = new point(plabel, 1, [320, 220], [10, 0]); P[plabel].render(); ++plabel;
+			P[plabel] = new point(plabel, 1, [320, 320], [0, 10]); P[plabel].render(); ++plabel;
+			P[plabel] = new point(plabel, 1, [220, 320], [-10, 0]); P[plabel].render(); ++plabel;
 
-			C[clabel] = new dist_constraint(P[0], P[1]); ++clabel;
-			C[clabel] = new dist_constraint(P[1], P[2]); ++clabel;
-
+			C[clabel] = new dist_constraint(clabel, P[0], P[1]); C[clabel].render(); ++clabel;
+			C[clabel] = new dist_constraint(clabel, P[1], P[2]); C[clabel].render(); ++clabel;
+			C[clabel] = new dist_constraint(clabel, P[2], P[3]); C[clabel].render(); ++clabel;
+			//C[clabel] = new dist_constraint(clabel, P[3], P[0]); C[clabel].render(); ++clabel;
 		}
 
 
