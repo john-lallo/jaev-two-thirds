@@ -61,6 +61,9 @@
 		/* global */
 		var dt = 0.1;
 
+		var world_offset = [0, 0];
+		var world_dimens = [0, 0];
+
 		var g = [0, 0];//-9.81];
 
 		/* point mass */
@@ -82,6 +85,14 @@
 		
 			$("#world").append(elem_str);
 			this.elem = $("#P" + this.i);
+			this.elem.on('mousedown', function(e){
+				var i = $(this).attr('id').substring(1);
+				Q = [
+					(e.pageX - world_offset[0]),
+					(world_dimens[1] - e.pageY + world_offset[1])
+					];
+				P[i].toggleDrag();
+			});
 			this.sync();
 		}
 
@@ -92,6 +103,30 @@
 				+ (-this.q[1]) + "px)"
 			});
 		}
+
+		/* (interactivity) */
+
+		var Q = [0, 0];
+		var drag_i = 0;
+		var ON = false;
+
+		function update_Q(e){
+			Q = [
+			(e.pageX - world_offset[0]),
+			(world_dimens[1] - e.pageY + world_offset[1])
+			];
+		}
+
+		point.prototype.toggleDrag = function(){
+			if(ON){ ON = false; } else {
+			drag_i = this.i;
+			ON = true;
+			}
+		}
+
+
+
+
 
 		/* constraint */
 		var constraint = function(i, A, B){
@@ -181,6 +216,10 @@
 		}
 
 
+
+
+
+
 		/* solve constraints */
 		function constrain(){
 			C.forEach(function(c){ c.solve(); });
@@ -195,6 +234,9 @@
 
 				p.qprev = p.q; p.q = qnext;
 			})
+
+			//handle dragging
+			if(ON){ P[drag_i].q = Q; }
 		}
 
 
@@ -235,6 +277,11 @@
 
 
 		$(document).ready(function(){
+
+			world_dimens = [$('#world').width(), $('#world').height()];
+			world_offset = [$('#world').offset().left, $('#world').offset().top];
+
+			$(document).on('mousemove', update_Q);
 
 			init();
 
