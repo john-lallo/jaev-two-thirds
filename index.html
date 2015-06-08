@@ -18,6 +18,8 @@
 			width: 720px;
 			height: 720px;
 
+			cursor: default;
+
 			overflow: hidden;
 		}
 
@@ -27,6 +29,8 @@
 
 			border: 3px solid #222;
 			border-radius: 100%;
+
+			cursor: default;
 
   			/*box-shadow: 0 0 0 4px #222;*/
 		}
@@ -39,6 +43,8 @@
 
 			border: 1px solid #aaa;
 			border-radius: 100%;
+
+			cursor: default;
 		}
 
 		.solid { background-color: #aaa; }
@@ -51,6 +57,8 @@
 			-webkit-transform-origin: center left;
 
 			z-index: 1000;
+
+			cursor: default;
 		}
 	</style>
 
@@ -59,12 +67,12 @@
 	<script language = "javascript">
 
 		/* global */
-		var dt = 0.1;
+		var dt = 0.05;
 
 		var world_offset = [0, 0];
 		var world_dimens = [0, 0];
 
-		var g = [0, 0];//-9.81];
+		var g = [0, -9.81];
 
 		/* point mass */
 		var point = function(i, mass, q, v){
@@ -85,15 +93,13 @@
 		
 			$("#world").append(elem_str);
 			this.elem = $("#P" + this.i);
+			this.sync();
+
 			this.elem.on('mousedown', function(e){
 				var i = $(this).attr('id').substring(1);
-				Q = [
-					(e.pageX - world_offset[0]),
-					(world_dimens[1] - e.pageY + world_offset[1])
-					];
-				P[i].toggleDrag();
+				P[i].startDrag();
 			});
-			this.sync();
+
 		}
 
 		point.prototype.sync = function(){
@@ -117,12 +123,8 @@
 			];
 		}
 
-		point.prototype.toggleDrag = function(){
-			if(ON){ ON = false; } else {
-			drag_i = this.i;
-			ON = true;
-			}
-		}
+		point.prototype.startDrag = function(){ drag_i = this.i; ON = true; }
+		function stopDrag(){ ON = false; }
 
 
 
@@ -296,6 +298,7 @@
 			world_offset = [$('#world').offset().left, $('#world').offset().top];
 
 			$(document).on('mousemove', update_Q);
+			$(document).on('mouseup', stopDrag);
 
 			init();
 
