@@ -291,7 +291,9 @@
 				((x1*y2-y1*x2)*(y3-y4)-(y1-y2)*(x3*y4-y3*x4)) / 
 				((x1-x2)*(y3-y4)-(y1-y2)*(x3-x4));
 
-				console.log('COLLISION: ' + X + ',' + Y)
+				if(((A.q[0]-X)*(B.q[0]-X) > 0) || ((A.q[1]-Y)*(B.q[1]-Y) > 0)){ return false; }
+
+				console.log('Kollision zwischen ' + P.i + ' & ' + A.i + '-' + B.i + ' : ' + X + ',' + Y)
 
 				return [X, Y];
 
@@ -390,10 +392,10 @@
 
 			//var V = [];
 
-			P[plabel] = new point(plabel, 1, [400, 500], [0, 0]); P[plabel].render(); ++plabel;
-			P[plabel] = new point(plabel, 1, [500, 600], [0, 0]); P[plabel].render(); ++plabel;
-			P[plabel] = new point(plabel, 1, [200, 550], [60, 40]); P[plabel].render(); ++plabel;
-			P[plabel] = new point(plabel, 1, [250, 550], [60, -40]); P[plabel].render(); ++plabel;
+			P[plabel] = new point(plabel, 1, [400, 480], [-10, 0]); P[plabel].render(); ++plabel;
+			P[plabel] = new point(plabel, 1, [480, 580], [-10, 0]); P[plabel].render(); ++plabel;
+			P[plabel] = new point(plabel, 1, [200, 500], [20, 0]); P[plabel].render(); ++plabel;
+			P[plabel] = new point(plabel, 1, [200, 450], [20, 0]); P[plabel].render(); ++plabel;
 
 			C[clabel] = new dist_constraint(clabel, P[0], P[1]); C[clabel].render(); ++clabel;
 			C[clabel] = new dist_constraint(clabel, P[2], P[3]); C[clabel].render(); ++clabel;
