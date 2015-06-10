@@ -60,6 +60,18 @@
 
 			cursor: default;
 		}
+
+		.K {
+			position: absolute;
+			width: 4px; height: 4px;
+
+			background-color: #f93;
+			border-radius: 100%;
+
+			cursor: default;
+
+  			/*box-shadow: 0 0 0 4px #222;*/
+		}
 	</style>
 
 	<script src = "https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
@@ -219,6 +231,43 @@
 		}
 
 
+		/* constraint: collision constraint */
+		function k_constraint(i, A, B, P, Pc){
+			constraint.call(this, i, A, B);
+			this.P = P;
+			this.Pc = Pc;
+		}
+		k_constraint.prototype = Object.create(constraint.prototype);
+		k_constraint.prototype.constructor = k_constraint;
+
+		k_constraint.prototype.C = function(){
+			var d = numeric['-'](this.A.q, this.B.q);
+			return ((d[0]*d[0] + d[1]*d[1]) - this.D*this.D)/2;
+		}
+		k_constraint.prototype.nablaC = function(){
+			var nablaC = [[
+				this.A.q[0] - this.B.q[0],
+				this.A.q[1] - this.B.q[1],
+				this.B.q[0] - this.A.q[0],
+				this.B.q[1] - this.A.q[1],
+			]];
+			return nablaC;
+		}
+
+
+		k_constraint.prototype.render = function(){
+		
+			var elem_str =
+			'<div id = "K' + this.i + '" class = "K" ' +
+			'style = "bottom: 0px; left: 0px; -webkit-transform: translate(' +
+				+ this.Pc[0] + 'px, '
+				+ (-this.Pc[1]) + 'px)"></div>';
+		
+			$("#world").append(elem_str);
+		}
+		k_constraint.prototype.sync = function(){ return; }
+
+
 		/* collision detection */
 
 		function fetchCollision(A, B, P){
@@ -244,6 +293,8 @@
 
 				console.log('COLLISION: ' + X + ',' + Y)
 
+				return [X, Y];
+
 			} else { return false; }
 			/*
 
@@ -264,11 +315,19 @@
 
 		/* collision detection, with all constraint shafts tangible */
 		function collide(){
-			
+			klabel = 0;
+			K = [];			
+
 			P.forEach(function(p){
 			C.forEach(function(c){
 				if(!((p.i == c.A.i) || (p.i == c.B.i))){
-				fetchCollision(c.A, c.B, p);
+
+					var k = fetchCollision(c.A, c.B, p);
+					if(k){
+						K[klabel] = new k_constraint(klabel, c.A, c.B, p, k);
+						K[klabel].render(); ++klabel;
+					}
+
 				}
 			});
 			});
@@ -325,6 +384,7 @@
 
 		var plabel = 0;
 		var clabel = 0;
+		var klabel = 0;
 		/* construct world */
 		function init(){
 
