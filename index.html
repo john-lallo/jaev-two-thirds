@@ -151,7 +151,18 @@
 			this.elem = null;
 		}
 		constraint.prototype.C = function() { return 0;	}
-		constraint.prototype.nablaC = function() { return [[0, 0, 0, 0]]; }
+		constraint.prototype.nablaC = function() {
+			var e = 0.001;
+			var C0 = this.C();
+
+			var nablaC = [[]];
+			this.A.q[0]+=e; nablaC[0][0] = (this.C()-C0)/e; this.A.q[0]-=e;
+			this.A.q[1]+=e; nablaC[0][1] = (this.C()-C0)/e; this.A.q[1]-=e;
+			this.B.q[0]+=e; nablaC[0][2] = (this.C()-C0)/e; this.B.q[0]-=e;
+			this.B.q[1]+=e; nablaC[0][3] = (this.C()-C0)/e; this.B.q[1]-=e;
+			
+			return nablaC;
+		}
 		constraint.prototype.solve = function(){
 			var nablaC = this.nablaC();
 			var nablaCT = numeric['transpose'](nablaC);
@@ -193,21 +204,6 @@
 			var d = numeric['-'](this.A.q, this.B.q);
 			return ((d[0]*d[0] + d[1]*d[1]) - this.D*this.D)/2;
 		}
-
-		/*
-		dist_constraint.prototype.nablaC = function(){
-			var e = 0.001;
-			var C0 = this.C();
-
-			var nablaC = [[]];
-			this.A.q[0]+=e; nablaC[0][0] = (this.C()-C0)/e; this.A.q[0]-=e;
-			this.A.q[1]+=e; nablaC[0][1] = (this.C()-C0)/e; this.A.q[1]-=e;
-			this.B.q[0]+=e; nablaC[0][2] = (this.C()-C0)/e; this.B.q[0]-=e;
-			this.B.q[1]+=e; nablaC[0][3] = (this.C()-C0)/e; this.B.q[1]-=e;
-			
-			return nablaC;
-		}
-		*/
 		
 		dist_constraint.prototype.nablaC = function(){
 			var nablaC = [[
@@ -247,10 +243,9 @@
 
 
 		/* constraint: collision constraint */
-		function k_constraint(i, A, B, P, Pc){
+		function k_constraint(i, A, B, P){
 			constraint.call(this, i, A, B);
 			this.P = P;
-			this.Pc = Pc;
 		}
 		k_constraint.prototype = Object.create(constraint.prototype);
 		k_constraint.prototype.constructor = k_constraint;
@@ -275,8 +270,8 @@
 			var elem_str =
 			'<div id = "K' + this.i + '" class = "K" ' +
 			'style = "bottom: 0px; left: 0px; -webkit-transform: translate(' +
-				+ this.Pc[0] + 'px, '
-				+ (-this.Pc[1]) + 'px)"></div>';
+				+ this.P.q[0] + 'px, '
+				+ (-this.P.q[1]) + 'px)"></div>';
 		
 			$("#world").append(elem_str);
 		}
@@ -288,9 +283,7 @@
 		function X(O, A, B){ return ((A[0]-O[0])*(B[1]-O[1]) - (A[1]-O[1])*(B[0]-O[0])); }
 
 		function contains(A, B, C, P){
-			return
-			(X(A, B, P) * X(B, C, P) > 0) &&
-			(X(B, C, P) * X(C, A, P) > 0);
+			return (X(A, B, P) * X(B, C, P) > 0) && (X(B, C, P) * X(C, A, P) > 0);
 		}
 		function fetchCollision(A, B, P){
 
@@ -336,8 +329,9 @@
 				if(!((p.i == c.A.i) || (p.i == c.B.i))){
 
 					var k = fetchCollision(c.A, c.B, p);
+					console.log(k);
 					if(k){
-						K[klabel] = new k_constraint(klabel, c.A, c.B, p, k);
+						K[klabel] = new k_constraint(klabel, c.A, c.B, p);
 						K[klabel].render(); ++klabel;
 					}
 
