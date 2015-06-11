@@ -153,18 +153,6 @@
 		}
 		constraint.prototype.condition = function() { return true; }
 		constraint.prototype.C = function() { return 0;	}
-		constraint.prototype.nablaC = function() {
-			var e = 0.001;
-			var C0 = this.C();
-
-			var nablaC = [[]];
-			this.A.q[0]+=e; nablaC[0][0] = (this.C()-C0)/e; this.A.q[0]-=e;
-			this.A.q[1]+=e; nablaC[0][1] = (this.C()-C0)/e; this.A.q[1]-=e;
-			this.B.q[0]+=e; nablaC[0][2] = (this.C()-C0)/e; this.B.q[0]-=e;
-			this.B.q[1]+=e; nablaC[0][3] = (this.C()-C0)/e; this.B.q[1]-=e;
-			
-			return nablaC;
-		}
 		constraint.prototype.solve = function(){
 		if(this.condition()){
 			var nablaC = this.nablaC();
@@ -261,7 +249,7 @@
 			return X(this.B.q, this.A.q, this.P.q);
 		}
 		k_constraint.prototype.nablaC = function() {
-			var e = 0.001;
+			var e = 1e-6;
 			var C0 = this.C();
 
 			var nablaC = [[]];
@@ -442,11 +430,26 @@
 
 			//var V = [];
 
-			P[plabel] = new point(plabel, 1, [400, 480], [-15, 0]); P[plabel].render(); ++plabel;
-			P[plabel] = new point(plabel, 1, [480, 580], [5, 0]); P[plabel].render(); ++plabel;
-			P[plabel] = new point(plabel, 1, [200, 520], [20, 0]); P[plabel].render(); ++plabel;
+			P[plabel] = new point(plabel, 1, [400, 480], [0, 0]); P[plabel].render(); ++plabel;
+			P[plabel] = new point(plabel, 1, [400, 440], [0, 0]); P[plabel].render(); ++plabel;
+			P[plabel] = new point(plabel, 1, [400, 400], [0, 0]); P[plabel].render(); ++plabel;
+			P[plabel] = new point(plabel, 1, [400, 360], [0, 0]); P[plabel].render(); ++plabel;
+			P[plabel] = new point(plabel, 1, [390, 320], [0, 0]); P[plabel].render(); ++plabel;
+			P[plabel] = new point(plabel, 1, [410, 320], [0, 0]); P[plabel].render(); ++plabel;
+
+			P[plabel] = new point(plabel, 1, [480, 580], [0, 0]); P[plabel].render(); ++plabel;
+			P[plabel] = new point(plabel, 1, [200, 520], [0, 0]); P[plabel].render(); ++plabel;
 
 			C[clabel] = new dist_constraint(clabel, P[0], P[1]); C[clabel].render(); ++clabel;
+			C[clabel] = new dist_constraint(clabel, P[1], P[2]); C[clabel].render(); ++clabel;
+			C[clabel] = new dist_constraint(clabel, P[2], P[3]); C[clabel].render(); ++clabel;
+			C[clabel] = new dist_constraint(clabel, P[3], P[4]); C[clabel].render(); ++clabel;
+			C[clabel] = new dist_constraint(clabel, P[4], P[5]); C[clabel].render(); ++clabel;
+			C[clabel] = new dist_constraint(clabel, P[5], P[3]); C[clabel].render(); ++clabel;
+
+
+			C[clabel] = new dist_constraint(clabel, P[6], P[7]); C[clabel].render(); ++clabel;
+		
 		}
 
 
