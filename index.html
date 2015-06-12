@@ -143,70 +143,95 @@
 
 
 
-		/* constraint */
-		var constraint = function(i, A, B){
+		/* constraint: generalized. */
+		var constraint = function(i, S){
 
-			this.i = i;
-			this.A = A; this.B = B;
+			this.i = i;	//index
+			this.S = S;	//member points
 
 			this.elem = null;
+
+			this.prepare();
 		}
+		constraint.prototype.prepare = function() {	this.Wgen(); /*generate mass matrix*/ }
+
 		constraint.prototype.condition = function() { return true; }
-		constraint.prototype.C = function() { return 0;	}
-		constraint.prototype.solve = function(){
-		if(this.condition()){
-			var nablaC = this.nablaC();
-			var nablaCT = numeric['transpose'](nablaC);
 
-			var W = [
-				[this.A.invm, 0, 0, 0],
-				[0, this.A.invm, 0, 0],
-				[0, 0, this.B.invm, 0],
-				[0, 0, 0, this.B.invm]
-			];
+		constraint.prototype.Wgen = function(){
+			this.W = [];
 
-			var WnablaCT = numeric['dot'](W, nablaCT);
+			for(var i = 0; i < 2*this.S.length; ++i){ this.W[i] = [];
+			for(var j = 0; j < 2*this.S.length; ++j){
+				this.W[i][j] = 0;
+			}}
 
-			var nablaCWnablaCT =
-			numeric['dot'](nablaC, WnablaCT);
-
-			var lambda =
-			numeric['*'](
-				numeric['inv'](nablaCWnablaCT), numeric['*'](-1, this.C())
-			);
-
-			var dP = numeric['dot'](WnablaCT, lambda);
-
-			//update positions
-			this.A.q = numeric['+'](this.A.q, [dP[0][0], dP[1][0]]);
-			this.B.q = numeric['+'](this.B.q, [dP[2][0], dP[3][0]]);
+			for(var i = 0; i < this.S.length; ++i){
+				this.W[2*i][2*i] = this.S[i].invm;
+				this.W[2*i+1][2*i+1] = this.S[i].invm;			
+			}
 		}
+
+		constraint.prototype.C = function() { return 0;	}
+		constraint.prototype.nablaC = function() {
+
+			var nablaC = [];
+
+			var C0 = this.C();
+			var epsilon = 1e-6;
+			for(var i = 0; i < this.S.length; ++i){
+				this.S[i].q[0] += epsilon; nablaC[2*i] = (this.C()-C0)/epsilon; this.S[i].q[0] -= epsilon;
+				this.S[i].q[1] += epsilon; nablaC[2*i+1] = (this.C()-C0)/epsilon; this.S[i].q[1] -= epsilon;
+			}
+
+			return [nablaC];
+		}
+
+		constraint.prototype.solve = function(){
+
+			if(this.condition()){
+				var nablaC = this.nablaC();
+				var nablaCT = numeric['transpose'](nablaC);
+
+				var WnablaCT = numeric['dot'](this.W, nablaCT);
+
+				var nablaCWnablaCT =
+				numeric['dot'](nablaC, WnablaCT);
+
+				var lambda =
+				numeric['*'](
+					numeric['inv'](nablaCWnablaCT), numeric['*'](-1, this.C())
+				);
+
+				var dP = numeric['dot'](WnablaCT, lambda);
+
+				//update positions
+				for(var i = 0; i < this.S.length; ++i){	this.S[i].q = numeric['+'](this.S[i].q, [dP[2*i][0], dP[2*i+1][0]]); }
+			}
 		}
 
 		/* constraint: dist constraint */
 		function dist_constraint(i, A, B){
-			constraint.call(this, i, A, B);
-			var D = numeric['-'](this.A.q, this.B.q);
+			constraint.call(this, i, [A, B]);
+
+			var D = numeric['-'](this.S[0].q, this.S[1].q);
 			this.D = Math.sqrt(D[0]*D[0] + D[1]*D[1]);
 		}
 		dist_constraint.prototype = Object.create(constraint.prototype);
 		dist_constraint.prototype.constructor = dist_constraint;
 
 		dist_constraint.prototype.C = function(){
-			var d = numeric['-'](this.A.q, this.B.q);
+			var d = numeric['-'](this.S[0].q, this.S[1].q);
 			return ((d[0]*d[0] + d[1]*d[1]) - this.D*this.D)/2;
 		}
-		
 		dist_constraint.prototype.nablaC = function(){
 			var nablaC = [[
-				this.A.q[0] - this.B.q[0],
-				this.A.q[1] - this.B.q[1],
-				this.B.q[0] - this.A.q[0],
-				this.B.q[1] - this.A.q[1],
+				this.S[0].q[0] - this.S[1].q[0],
+				this.S[0].q[1] - this.S[1].q[1],
+				this.S[1].q[0] - this.S[0].q[0],
+				this.S[1].q[1] - this.S[0].q[1],
 			]];
 			return nablaC;
 		}
-
 		dist_constraint.prototype.render = function(){
 
 			var elem_str =
@@ -219,160 +244,20 @@
 		}
 
 		dist_constraint.prototype.sync = function(){
-			var d = numeric['-'](this.A.q, this.B.q);
+			var d = numeric['-'](this.S[0].q, this.S[1].q);
 			d = Math.sqrt(d[0]*d[0] + d[1]*d[1]);
 
-			var th = Math.acos((this.B.q[0] - this.A.q[0]) / d) *
-					(this.B.q[1] - this.A.q[1] > 0 ? 1 : -1);
+			var th = Math.acos((this.S[1].q[0] - this.S[0].q[0]) / d) *
+					(this.S[1].q[1] - this.S[0].q[1] > 0 ? 1 : -1);
 
 			this.elem.css({
 				"width" : (d) + "px",
 				"-webkit-transform" : "translate("
-				+ this.A.q[0] + "px, "
-				+ (-this.A.q[1]) + "px) rotate(" + (-th) + "rad)"
+				+ this.S[0].q[0] + "px, "
+				+ (-this.S[0].q[1]) + "px) rotate(" + (-th) + "rad)"
 			});
 		}
 
-
-		/* constraint: collision constraint */
-		function k_constraint(i, A, B, P){
-			constraint.call(this, i, A, B);
-			this.P = P;
-		}
-		k_constraint.prototype = Object.create(constraint.prototype);
-		k_constraint.prototype.constructor = k_constraint;
-
-		k_constraint.prototype.condition = function(){
-			return (X(this.A.q, this.B.q, this.P.q) * X(this.A.qprev, this.B.qprev, this.P.qprev) > 0);
-		}
-		k_constraint.prototype.C = function(){
-			return X(this.B.q, this.A.q, this.P.q);
-		}
-		k_constraint.prototype.nablaC = function() {
-			var e = 1e-6;
-			var C0 = this.C();
-
-			var nablaC = [[]];
-			this.A.q[0]+=e; nablaC[0][0] = (this.C()-C0)/e; this.A.q[0]-=e;
-			this.A.q[1]+=e; nablaC[0][1] = (this.C()-C0)/e; this.A.q[1]-=e;
-			this.B.q[0]+=e; nablaC[0][2] = (this.C()-C0)/e; this.B.q[0]-=e;
-			this.B.q[1]+=e; nablaC[0][3] = (this.C()-C0)/e; this.B.q[1]-=e;
-			this.P.q[0]+=e; nablaC[0][4] = (this.C()-C0)/e; this.P.q[0]-=e;
-			this.P.q[1]+=e; nablaC[0][5] = (this.C()-C0)/e; this.P.q[1]-=e;
-
-			return nablaC;
-		}
-		k_constraint.prototype.solve = function(){
-		if(this.condition()){
-			var nablaC = this.nablaC();
-			var nablaCT = numeric['transpose'](nablaC);
-
-			var W = [
-				[this.A.invm, 0, 0, 0, 0, 0],
-				[0, this.A.invm, 0, 0, 0, 0],
-				[0, 0, this.B.invm, 0, 0, 0],
-				[0, 0, 0, this.B.invm, 0, 0],
-				[0, 0, 0, 0, this.P.invm, 0],
-				[0, 0, 0, 0, 0, this.P.invm]
-			];
-
-			var WnablaCT = numeric['dot'](W, nablaCT);
-
-			var nablaCWnablaCT =
-			numeric['dot'](nablaC, WnablaCT);
-
-			var lambda =
-			numeric['*'](
-				numeric['inv'](nablaCWnablaCT), numeric['*'](-1, this.C())
-			);
-
-			var dP = numeric['dot'](WnablaCT, lambda);
-
-			//update positions
-			this.A.q = numeric['+'](this.A.q, [dP[0][0], dP[1][0]]);
-			this.B.q = numeric['+'](this.B.q, [dP[2][0], dP[3][0]]);
-			this.P.q = numeric['+'](this.P.q, [dP[4][0], dP[5][0]]);
-		}
-		}
-
-		k_constraint.prototype.render = function(){
-		
-			var elem_str =
-			'<div id = "K' + this.i + '" class = "K" ' +
-			'style = "bottom: 0px; left: 0px; -webkit-transform: translate(' +
-				+ this.P.q[0] + 'px, '
-				+ (-this.P.q[1]) + 'px)"></div>';
-		
-			$("#world").append(elem_str);
-		}
-		k_constraint.prototype.sync = function(){ return; }
-
-
-		/* collision detection */
-
-		//maths
-		function X(O, A, B){ return ((A[0]-O[0])*(B[1]-O[1]) - (A[1]-O[1])*(B[0]-O[0])); }
-		function contains(A, B, C, P){
-			return (X(A, B, P) * X(B, C, P) > 0) && (X(B, C, P) * X(C, A, P) > 0);
-		}
-
-		//main routine
-		function fetchCollision(A, B, P){
-
-			var a0 = numeric['-'](A.qprev, P.qprev);
-			var b0 = numeric['-'](B.qprev, P.qprev);
-			var a1 = numeric['-'](A.q, P.q);
-			var b1 = numeric['-'](B.q, P.q);
-
-			var count = 0;
-
-			if(contains(a0, a1, b1, [0, 0])){ ++count; }
-			if(contains(a1, b1, b0, [0, 0])){ ++count; }
-			if(contains(b1, b0, a0, [0, 0])){ ++count; }
-			if(contains(b0, a0, a1, [0, 0])){ ++count; }
-
-			if(count == 2){
-			//a loop of four triangles containing an iterior point exactly twice
-
-			//console.log('KOL');
-
-			return true;
-
-			} else { return false; }
-		}
-
-
-
-
-
-
-
-
-
-
-
-
-		/* collision detection, with all constraint shafts tangible */
-		function collide(){
-			klabel = 0;
-			K = [];			
-
-			P.forEach(function(p){
-			C.forEach(function(c){
-				if(!((p.i == c.A.i) || (p.i == c.B.i))){
-
-					var k = fetchCollision(c.A, c.B, p);
-					if(k){
-						K[klabel] = new k_constraint(klabel, c.A, c.B, p);
-						K[klabel].render(); ++klabel;
-					}
-
-				}
-			});
-			});
-		}
-
-		
 
 
 
@@ -380,8 +265,7 @@
 		/* solve constraints */
 		function constrain(){
 			for(var i = 0; i < 12; ++i){
-			C.forEach(function(c){ c.solve(); });
-			K.forEach(function(k){ k.solve(); });
+				C.forEach(function(c){ c.solve(); });
 			}
 		}
 
@@ -407,48 +291,43 @@
 			//if(t == 120){ P[0].q[0] += 100; P[1].q[0] -= 100; }
 
 			integrate();
+
 			constrain();
 
 			P.forEach(function(p){ p.sync(); });
 			C.forEach(function(c){ c.sync(); });
 
 			//placeholder
-			collide();
+			//collide();
 		}
 
 
 
 		var P = [];	//particles
 		var C = [];	//constraints
-		var K = [];	//[k/c]ollision constraints
 
 		var plabel = 0;
 		var clabel = 0;
-		var klabel = 0;
+
 		/* construct world */
 		function init(){
 
 			//var V = [];
 
-			P[plabel] = new point(plabel, 1, [400, 480], [0, 0]); P[plabel].render(); ++plabel;
-			P[plabel] = new point(plabel, 1, [400, 440], [0, 0]); P[plabel].render(); ++plabel;
-			P[plabel] = new point(plabel, 1, [400, 400], [0, 0]); P[plabel].render(); ++plabel;
-			P[plabel] = new point(plabel, 1, [400, 360], [0, 0]); P[plabel].render(); ++plabel;
-			P[plabel] = new point(plabel, 1, [390, 320], [0, 0]); P[plabel].render(); ++plabel;
-			P[plabel] = new point(plabel, 1, [410, 320], [0, 0]); P[plabel].render(); ++plabel;
-
-			P[plabel] = new point(plabel, 1, [480, 580], [0, 0]); P[plabel].render(); ++plabel;
+			P[plabel] = new point(plabel, 1, [200, 580], [0, 0]); P[plabel].render(); ++plabel;
 			P[plabel] = new point(plabel, 1, [200, 520], [0, 0]); P[plabel].render(); ++plabel;
 
+
 			C[clabel] = new dist_constraint(clabel, P[0], P[1]); C[clabel].render(); ++clabel;
+
+			P[plabel] = new point(plabel, 1, [200, 460], [0, 0]); P[plabel].render(); ++plabel;
+			P[plabel] = new point(plabel, 1, [200, 400], [0, 0]); P[plabel].render(); ++plabel;
+			P[plabel] = new point(plabel, 1, [200, 340], [0, 0]); P[plabel].render(); ++plabel;
+
 			C[clabel] = new dist_constraint(clabel, P[1], P[2]); C[clabel].render(); ++clabel;
 			C[clabel] = new dist_constraint(clabel, P[2], P[3]); C[clabel].render(); ++clabel;
 			C[clabel] = new dist_constraint(clabel, P[3], P[4]); C[clabel].render(); ++clabel;
-			C[clabel] = new dist_constraint(clabel, P[4], P[5]); C[clabel].render(); ++clabel;
-			C[clabel] = new dist_constraint(clabel, P[5], P[3]); C[clabel].render(); ++clabel;
 
-
-			C[clabel] = new dist_constraint(clabel, P[6], P[7]); C[clabel].render(); ++clabel;
 		
 		}
 
