@@ -84,7 +84,7 @@
 		var world_offset = [0, 0];
 		var world_dimens = [0, 0];
 
-		var g = [0, -9.81];
+		var g = [0, -9.8];
 
 		/* point mass */
 		var point = function(i, mass, q, v){
@@ -122,6 +122,13 @@
 				+ (-this.q[1]) + "px)"
 			});
 		}
+
+		/* body */
+		var body = function(i, S){
+			this.i = i; //index
+			this.S = S;	//components (ordered)
+		}
+
 
 		/* (interactivity) */
 
@@ -196,6 +203,8 @@
 
 				var nablaCWnablaCT =
 				numeric['dot'](nablaC, WnablaCT);
+
+				if(numeric['det'](nablaCWnablaCT) == 0){ return; }
 
 				var lambda =
 				numeric['*'](
@@ -288,11 +297,102 @@
 
 
 
+		/* collision detection */
+		function X(O, A, B){ return ((A[0]-O[0])*(B[1]-O[1]) - (A[1]-O[1])*(B[0]-O[0])); }
+
+		function fetch_collision(A, B){
+			//check if inside.
+			var flag = true;
+			for(var i = 0; i < B.S.length; ++i){
+				var j = i+1; if(i == B.S.length - 1){ j = 0; }
+
+				if(X(B.S[i].q, B.S[j].q, A.q) >= 0){ flag = false; break; }
+			}
+			if(!flag){ return; }
+
+			console.log('INSIDE');
+
+			//point on wrong side of edge, generate collision constraint
+
+			var pres = A.q;
+			var prev = numeric['-'](A.qprev, numeric['*'](10/dt, numeric['-'](A.q, A.qprev)));
+
+			for(var i = 0; i < B.S.length; ++i){
+				var j = i+1; if(i == B.S.length - 1){ j = 0; }
+
+				if(
+					(X(prev, pres, B.S[i].q) * X(prev, pres, B.S[j].q) < 0) &&
+					(X(B.S[i].q, B.S[j].q, pres) * X(B.S[i].q, B.S[j].q, prev) < 0)
+				){
+					K[klabel] = new k_constraint(klabel, A, [B.S[i], B.S[j]]); //++klabel;
+					console.log(i + '-' + j);
+
+					break;
+				}
+			}
+
+			/*
+			var flag2 = false;
+			for(var i = 0; i < B.S.length; ++i){
+				var j = i+1; if(i == B.S.length - 1){ j = 0; }
+
+				if(
+					(X(B.S[i].qprev, B.S[j].qprev, A.qprev) >= 0) *
+					(X(B.S[i].q, B.S[j].q, A.q) <= 0)
+				){
+					console.log('collision: ' + A.i + ' ' + B.S[i].i + '-' + B.S[j].i);
+					K[klabel] = new k_constraint(klabel, A, [B.S[i], B.S[j]]); //++klabel;
+					//console.log(K[klabel]); ++klabel;
+					flag2 = true;
+				}
+			}
+			*/
+		}
+
+
+
+		/* constraint: collision constraint */
+		function k_constraint(i, A, L){
+			constraint.call(this, i, [A, L[0], L[1]]);
+		}
+		k_constraint.prototype = Object.create(constraint.prototype);
+		k_constraint.prototype.constructor = k_constraint;
+
+		k_constraint.prototype.condition = function(){
+			//console.log(X(this.S[1].q, this.S[2].q, this.S[0].q));
+			return X(this.S[1].q, this.S[2].q, this.S[0].q) < 0;
+		}
+
+		k_constraint.prototype.C = function(){
+			var d = X(this.S[1].q, this.S[2].q, this.S[0].q);
+			/*			
+			Math.abs(
+			(this.S[2].q[1] - this.S[1].q[1]) * this.S[0].q[0] -
+			(this.S[2].q[0] - this.S[1].q[0]) * this.S[0].q[1] +
+			this.S[2].q[0]*this.S[1].q[1] -
+			this.S[2].q[1]*this.S[1].q[0])
+
+			/((this.S[2].q[1]-this.S[1].q[1])*(this.S[2].q[1]-this.S[1].q[1])+
+			(this.S[2].q[0]-this.S[1].q[0])*(this.S[2].q[0]-this.S[1].q[0]));
+			*/
+			return d;
+		}
+
+
+
+
 		/* solve constraints */
 		function constrain(){
 			for(var i = 0; i < 12; ++i){
+
+				//permanent constraints
 				C.forEach(function(c){ c.solve(); });
+
+				//drag constraint
 				M.solve();
+
+				//collisions
+				K.forEach(function(k){ k.solve(); });
 			}
 		}
 
@@ -310,15 +410,26 @@
 
 
 		/* one simulation step. */
-		var t = 0.1;
+		var t = 0;
 		function timestep(){
 			++t;
 
 			//handle dragging
+			
 			M = new anchor_constraint(-999, P[drag_i], Q);
 			M.condition = function(){return ON;}
 
 			integrate();
+
+			//clear collision constraints
+			K = []; klabel = 0;
+	
+			//collision detection
+					
+			P.forEach(function(p){
+			B.forEach(function(b){ fetch_collision(p, b) });
+			});
+			
 			constrain();
 
 			P.forEach(function(p){ p.sync(); });
@@ -331,32 +442,48 @@
 
 
 		var P = [];	//particles
+		var B = [];	//(closed) bodies
+
 		var C = [];	//constraints: permanent
 		var K = []; //constraints: dynamic/collision
 		var M;		//constriants: interactivity
 
 
-
 		var plabel = 0;
+		var blabel = 0;
+
 		var clabel = 0;
+		var klabel = 0;
 
 		/* construct world */
 		function init(){
 
 			//var V = [];
 
-			P[plabel] = new point(plabel, 1, [200, 580], [0, 0]); P[plabel].render(); ++plabel;
-			P[plabel] = new point(plabel, 1, [200, 520], [0, 0]); P[plabel].render(); ++plabel;
 			P[plabel] = new point(plabel, 1, [200, 460], [0, 0]); P[plabel].render(); ++plabel;
-			P[plabel] = new point(plabel, 1, [200, 400], [0, 0]); P[plabel].render(); ++plabel;
-			P[plabel] = new point(plabel, 1, [200, 340], [0, 0]); P[plabel].render(); ++plabel;
+			P[plabel] = new point(plabel, 1, [240, 420], [0, 0]); P[plabel].render(); ++plabel;
+			P[plabel] = new point(plabel, 1, [200, 380], [0, 0]); P[plabel].render(); ++plabel;
+			P[plabel] = new point(plabel, 1, [160, 420], [0, 0]); P[plabel].render(); ++plabel;
 
-			C[clabel] = new anchor_constraint(clabel, P[0], [200, 580]); C[clabel].render(); ++clabel;
 
+			P[plabel] = new point(plabel, 1, [600, 500], [-60, 20]); P[plabel].render(); ++plabel;
+
+
+			
 			C[clabel] = new dist_constraint(clabel, P[0], P[1]); C[clabel].render(); ++clabel;
 			C[clabel] = new dist_constraint(clabel, P[1], P[2]); C[clabel].render(); ++clabel;
 			C[clabel] = new dist_constraint(clabel, P[2], P[3]); C[clabel].render(); ++clabel;
-			C[clabel] = new dist_constraint(clabel, P[3], P[4]); C[clabel].render(); ++clabel;
+			C[clabel] = new dist_constraint(clabel, P[3], P[0]); C[clabel].render(); ++clabel;
+
+			C[clabel] = new dist_constraint(clabel, P[0], P[2]); C[clabel].render(); ++clabel;
+			C[clabel] = new dist_constraint(clabel, P[1], P[3]); C[clabel].render(); ++clabel;
+
+			C[clabel] = new anchor_constraint(clabel, P[0], [200, 460]); C[clabel].render(); ++clabel;
+
+
+
+			B[blabel] = new body(blabel, [P[0], P[1], P[2], P[3]]); ++blabel;
+
 		}
 
 
@@ -370,7 +497,7 @@
 
 			init();
 
-			window.setInterval(timestep, 160 * dt);
+			window.setInterval(timestep, 80 * dt);
 		});
 
 
