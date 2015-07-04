@@ -357,7 +357,7 @@
 
 		/* solve constraints */
 		function constrain(){
-			for(var i = 0; i < 12; ++i){
+			for(var i = 0; i < 1; ++i){
 
 				//permanent constraints
 				C.forEach(function(c){ c.solve(); });
@@ -456,15 +456,10 @@
 		/* construct world */
 		function init(){
 
-			//P[plabel] = new point(plabel, 1, [400, 500], [0, 0]); P[plabel].render(); ++plabel;
+			
 			create_box([400, 450], 40, 40);
-
-			//C[clabel] = new dist_constraint(clabel, P[0], P[1]); C[clabel].render(); ++clabel;
 			C[clabel] = new anchor_constraint(clabel, P[0], 'q'); C[clabel].render(); ++clabel;
-
 			create_box([440, 500], 30, 30);
-
-			//P[plabel] = new point(plabel, 1, [400, 500], [0, 0]); P[plabel].render(); ++plabel;
 
 
 		}
