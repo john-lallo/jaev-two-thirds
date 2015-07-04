@@ -277,7 +277,8 @@
 		/* constraint: anchor constraint */
 		function anchor_constraint(i, A, anchor){
 			constraint.call(this, i, [A]);
-			this.anchor = anchor;
+			if (anchor == 'q'){this.anchor = A.q; }
+			else { this.anchor = anchor; }
 		}
 		anchor_constraint.prototype = Object.create(constraint.prototype);
 		anchor_constraint.prototype.constructor = dist_constraint;
@@ -300,53 +301,36 @@
 		/* collision detection */
 		function X(O, A, B){ return ((A[0]-O[0])*(B[1]-O[1]) - (A[1]-O[1])*(B[0]-O[0])); }
 
-		function fetch_collision(A, B){
-			//check if inside.
-			var flag = true;
-			for(var i = 0; i < B.S.length; ++i){
-				var j = i+1; if(i == B.S.length - 1){ j = 0; }
+		function fetch_collisions(){
 
-				if(X(B.S[i].q, B.S[j].q, A.q) >= 0){ flag = false; break; }
-			}
-			if(!flag){ return; }
+			K = []; klabel = 0;
 
-			console.log('INSIDE');
+			P.forEach(function(p){
+				B.forEach(function(b){
 
-			//point on wrong side of edge, generate collision constraint
+					//check if on inside of polygon
+					flag = true;
+					for(var i = 0; i < b.S.length; ++i){ var j = (i + 1) % b.S.length;
+					
+						if(X(b.S[i].q, b.S[j].q, p.q) < 1e-9){
+							flag = false; break;
+						}
+						//console.log(i + ' ' + j);
+					}
 
-			var pres = A.q;
-			var prev = numeric['-'](A.qprev, numeric['*'](10/dt, numeric['-'](A.q, A.qprev)));
+					if(flag){
+						console.log('beep');
+					for(var i = 0; i < b.S.length; ++i){ var j = (i + 1) % b.S.length;
+				
+						if(X(p.q, p.qprev, b.S[i].q) * X(p.q, p.qprev, b.S[j].q) < -1e-9){
+							K[klabel] = new k_constraint(klabel, p, [b.S[i], b.S[j]]); ++klabel; break;
+						}
+					}
 
-			for(var i = 0; i < B.S.length; ++i){
-				var j = i+1; if(i == B.S.length - 1){ j = 0; }
+					}
 
-				if(
-					(X(prev, pres, B.S[i].q) * X(prev, pres, B.S[j].q) < 0) &&
-					(X(B.S[i].q, B.S[j].q, pres) * X(B.S[i].q, B.S[j].q, prev) < 0)
-				){
-					K[klabel] = new k_constraint(klabel, A, [B.S[i], B.S[j]]); //++klabel;
-					console.log(i + '-' + j);
-
-					break;
-				}
-			}
-
-			/*
-			var flag2 = false;
-			for(var i = 0; i < B.S.length; ++i){
-				var j = i+1; if(i == B.S.length - 1){ j = 0; }
-
-				if(
-					(X(B.S[i].qprev, B.S[j].qprev, A.qprev) >= 0) *
-					(X(B.S[i].q, B.S[j].q, A.q) <= 0)
-				){
-					console.log('collision: ' + A.i + ' ' + B.S[i].i + '-' + B.S[j].i);
-					K[klabel] = new k_constraint(klabel, A, [B.S[i], B.S[j]]); //++klabel;
-					//console.log(K[klabel]); ++klabel;
-					flag2 = true;
-				}
-			}
-			*/
+				});
+			});
 		}
 
 
@@ -360,21 +344,11 @@
 
 		k_constraint.prototype.condition = function(){
 			//console.log(X(this.S[1].q, this.S[2].q, this.S[0].q));
-			return X(this.S[1].q, this.S[2].q, this.S[0].q) < 0;
+			return X(this.S[1].q, this.S[2].q, this.S[0].q) > 0;
 		}
 
 		k_constraint.prototype.C = function(){
 			var d = X(this.S[1].q, this.S[2].q, this.S[0].q);
-			/*			
-			Math.abs(
-			(this.S[2].q[1] - this.S[1].q[1]) * this.S[0].q[0] -
-			(this.S[2].q[0] - this.S[1].q[0]) * this.S[0].q[1] +
-			this.S[2].q[0]*this.S[1].q[1] -
-			this.S[2].q[1]*this.S[1].q[0])
-
-			/((this.S[2].q[1]-this.S[1].q[1])*(this.S[2].q[1]-this.S[1].q[1])+
-			(this.S[2].q[0]-this.S[1].q[0])*(this.S[2].q[0]-this.S[1].q[0]));
-			*/
 			return d;
 		}
 
@@ -421,15 +395,9 @@
 
 			integrate();
 
-			//clear collision constraints
-			K = []; klabel = 0;
-	
-			//collision detection
-					
-			P.forEach(function(p){
-			B.forEach(function(b){ fetch_collision(p, b) });
-			});
-			
+			//collision detection here.
+			fetch_collisions();
+
 			constrain();
 
 			P.forEach(function(p){ p.sync(); });
@@ -438,6 +406,36 @@
 			//placeholder
 			//collide();
 		}
+
+
+
+
+		/* interface for shapes */
+		function create_box(q, w, h){
+
+			w = w/2; h = h/2;
+
+			var t = plabel;
+
+			P[plabel] = new point(plabel, 1, [q[0]+w, q[1]+h], [0, 0]); P[plabel].render(); ++plabel;
+			P[plabel] = new point(plabel, 1, [q[0]-w, q[1]+h], [0, 0]); P[plabel].render(); ++plabel;
+			P[plabel] = new point(plabel, 1, [q[0]-w, q[1]-h], [0, 0]); P[plabel].render(); ++plabel;
+			P[plabel] = new point(plabel, 1, [q[0]+w, q[1]-h], [0, 0]); P[plabel].render(); ++plabel;
+			
+			C[clabel] = new dist_constraint(clabel, P[t  ], P[t+1]); C[clabel].render(); ++clabel;
+			C[clabel] = new dist_constraint(clabel, P[t+1], P[t+2]); C[clabel].render(); ++clabel;
+			C[clabel] = new dist_constraint(clabel, P[t+2], P[t+3]); C[clabel].render(); ++clabel;
+			C[clabel] = new dist_constraint(clabel, P[t+3], P[t  ]); C[clabel].render(); ++clabel;
+
+			C[clabel] = new dist_constraint(clabel, P[t  ], P[t+2]); C[clabel].render(); ++clabel;
+			C[clabel] = new dist_constraint(clabel, P[t+1], P[t+3]); C[clabel].render(); ++clabel;
+
+			B[blabel] = new body(blabel, [P[t], P[t+1], P[t+2], P[t+3]]); ++blabel;
+		}
+
+
+
+
 
 
 
@@ -458,31 +456,16 @@
 		/* construct world */
 		function init(){
 
-			//var V = [];
+			//P[plabel] = new point(plabel, 1, [400, 500], [0, 0]); P[plabel].render(); ++plabel;
+			create_box([400, 450], 40, 40);
 
-			P[plabel] = new point(plabel, 1, [200, 460], [0, 0]); P[plabel].render(); ++plabel;
-			P[plabel] = new point(plabel, 1, [240, 420], [0, 0]); P[plabel].render(); ++plabel;
-			P[plabel] = new point(plabel, 1, [200, 380], [0, 0]); P[plabel].render(); ++plabel;
-			P[plabel] = new point(plabel, 1, [160, 420], [0, 0]); P[plabel].render(); ++plabel;
+			//C[clabel] = new dist_constraint(clabel, P[0], P[1]); C[clabel].render(); ++clabel;
+			C[clabel] = new anchor_constraint(clabel, P[0], 'q'); C[clabel].render(); ++clabel;
 
+			create_box([440, 500], 30, 30);
 
-			P[plabel] = new point(plabel, 1, [600, 500], [-60, 20]); P[plabel].render(); ++plabel;
+			//P[plabel] = new point(plabel, 1, [400, 500], [0, 0]); P[plabel].render(); ++plabel;
 
-
-			
-			C[clabel] = new dist_constraint(clabel, P[0], P[1]); C[clabel].render(); ++clabel;
-			C[clabel] = new dist_constraint(clabel, P[1], P[2]); C[clabel].render(); ++clabel;
-			C[clabel] = new dist_constraint(clabel, P[2], P[3]); C[clabel].render(); ++clabel;
-			C[clabel] = new dist_constraint(clabel, P[3], P[0]); C[clabel].render(); ++clabel;
-
-			C[clabel] = new dist_constraint(clabel, P[0], P[2]); C[clabel].render(); ++clabel;
-			C[clabel] = new dist_constraint(clabel, P[1], P[3]); C[clabel].render(); ++clabel;
-
-			C[clabel] = new anchor_constraint(clabel, P[0], [200, 460]); C[clabel].render(); ++clabel;
-
-
-
-			B[blabel] = new body(blabel, [P[0], P[1], P[2], P[3]]); ++blabel;
 
 		}
 
@@ -497,7 +480,7 @@
 
 			init();
 
-			window.setInterval(timestep, 80 * dt);
+			//window.setInterval(timestep, 80 * dt);
 		});
 
 
